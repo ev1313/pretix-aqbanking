@@ -1,4 +1,7 @@
+#include <time.h>
+
 #include <aqbanking/banking.h>
+#include <gwenhywfar/gwenhywfar.h>
 #include <gwenhywfar/cgui.h>
 #include <aqbanking/jobgettransactions.h>
 #include <curl/curl.h>
@@ -129,6 +132,27 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 
 				if(remote_name && purpose)
 					fprintf(stdout, "%s %s ", remote_name, purpose);
+
+				const GWEN_TIME* valuta_date = AB_Transaction_GetValutaDate(t);
+				if (!valuta_date)
+				{
+					const GWEN_TIME *normal_date = AB_Transaction_GetDate(t);
+					if (normal_date)
+						valuta_date = normal_date;
+				}
+				if(valuta_date) {
+					time_t timer = GWEN_Time_toTime_t(valuta_date);
+
+					char buffer[26];
+					struct tm* tm_info;
+
+					tm_info = localtime(&timer);
+
+					strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
+					puts(buffer);
+				} else {
+					fprintf(stdout, "no date could be acquired for this transaction!\n");
+				}
 
 				fprintf(stdout, " (%.2f %s)\n",
 						AB_Value_GetValueAsDouble(v),

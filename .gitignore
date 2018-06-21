@@ -26,3 +26,4 @@ hexx0ar
 .do_built*
 *.did
 *.deps_ne
+*.out
