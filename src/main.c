@@ -109,6 +109,8 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 
 	ai=AB_ImExporterContext_GetFirstAccountInfo(ctx);
 	while(ai) {
+		unsigned int i = 0;
+
 		const AB_TRANSACTION *t;
 
 		t=AB_ImExporterAccountInfo_GetFirstTransaction(ai);
@@ -117,21 +119,22 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 
 			v=AB_Transaction_GetValue(t);
 			if (v) {
+				i++;
 				//purpose=(const char*)AB_Transaction_GetTransactionText(t);
 
-				char *remote_name = NULL;
-				char *purpose = NULL;
+				char *trans_remote_name = NULL;
+				char *trans_purpose = NULL;
+				time_t trans_time = 0;
+				double trans_value = 0.0;
+				char* trans_currency = NULL;
 
 				const GWEN_STRINGLIST* ab_remote_name = AB_Transaction_GetRemoteName(t);
 				if (ab_remote_name)
-					GWEN_StringList_ForEach(ab_remote_name, join_ab_strings_cb, &remote_name);
+					GWEN_StringList_ForEach(ab_remote_name, join_ab_strings_cb, &trans_remote_name);
 
 				const GWEN_STRINGLIST* ab_purpose = AB_Transaction_GetPurpose(t);
 				if (ab_purpose)
-					GWEN_StringList_ForEach(ab_purpose, join_ab_strings_cb, &purpose);
-
-				if(remote_name && purpose)
-					fprintf(stdout, "%s %s ", remote_name, purpose);
+					GWEN_StringList_ForEach(ab_purpose, join_ab_strings_cb, &trans_purpose);
 
 				const GWEN_TIME* valuta_date = AB_Transaction_GetValutaDate(t);
 				if (!valuta_date)
@@ -141,22 +144,27 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 						valuta_date = normal_date;
 				}
 				if(valuta_date) {
-					time_t timer = GWEN_Time_toTime_t(valuta_date);
-
-					char buffer[26];
-					struct tm* tm_info;
-
-					tm_info = localtime(&timer);
-
-					strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
-					puts(buffer);
+					trans_time = GWEN_Time_toTime_t(valuta_date);
 				} else {
-					fprintf(stdout, "no date could be acquired for this transaction!\n");
+					fprintf(stderr, "no date could be acquired for this transaction!\n");
 				}
 
-				fprintf(stdout, " (%.2f %s)\n",
-						AB_Value_GetValueAsDouble(v),
-						AB_Value_GetCurrency(v));
+				// time to human readable string
+				char buffer[26];
+				struct tm* tm_info;
+				tm_info = localtime(&trans_time);
+				strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
+
+				trans_value = AB_Value_GetValueAsDouble(v);
+				trans_currency = AB_Value_GetCurrency(v);
+				
+				fprintf(stdout, "transaction %lu - name: (%s) purpose: (%s) date: (%s) value: (%.2f %s)\n",
+						i,
+						trans_remote_name,
+						trans_purpose,
+						buffer,
+						trans_value,
+						trans_currency);
 			}
 			t=AB_ImExporterAccountInfo_GetNextTransaction(ai);
 		}
