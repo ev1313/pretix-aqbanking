@@ -1,10 +1,129 @@
 #include <time.h>
+#include <stdbool.h>
 
 #include <aqbanking/banking.h>
 #include <gwenhywfar/gwenhywfar.h>
 #include <gwenhywfar/cgui.h>
 #include <aqbanking/jobgettransactions.h>
 #include <curl/curl.h>
+
+// adapted from cjson
+//
+// this escapes the input_str to a valid json string.
+//
+// into output and output_length the string and it's size respectively will be written.
+//
+// input_str may be NULL, an empty json string is then returned.
+static bool escape_json(const char* input_str, char** output, size_t* output_length)
+{
+	if (output == NULL || output_length == NULL)
+	{
+		return false;
+	}
+	
+	const char* empty = "\"\"";
+
+	if(input_str == NULL) {
+		*output = malloc(sizeof(empty));
+		strcpy(*output, empty);
+		*output_length = sizeof(empty);
+		return true;
+	}
+
+	const char *input_pointer = NULL;
+	char *output_pointer = NULL;
+	char* output_str = NULL;
+	size_t output_len = 0;
+	size_t escape_characters = 0;
+
+	for (input_pointer = input_str; *input_pointer; input_pointer++)
+	{
+		switch (*input_pointer)
+		{
+			case '\"':
+			case '\\':
+			case '\b':
+			case '\f':
+			case '\n':
+			case '\r':
+			case '\t':
+				/* one character escape sequence */
+				escape_characters++;
+				break;
+			default:
+				if (*input_pointer < 32)
+				{
+					/* UTF-16 escape sequence uXXXX */
+					escape_characters += 5;
+				}
+				break;
+		}
+	}
+
+	output_len = (size_t)(input_pointer - input_str) + escape_characters;
+	output_str = malloc(output_len + sizeof(empty));
+
+	if (escape_characters == 0)
+	{
+		snprintf(output_str, output_len + sizeof(empty), "\"%s\"", input_str);
+		*output = output_str;
+		*output_length = output_len;
+		return true;
+	}
+
+	output_str[0] = '\"';
+	output_pointer = output_str + 1;
+
+	/* copy the string */
+	for (input_pointer = input_str; *input_pointer != '\0'; (void)input_pointer++, output_pointer++)
+	{
+		if ((*input_pointer > 31) && (*input_pointer != '\"') && (*input_pointer != '\\'))
+		{
+			/* normal character, copy */
+			*output_pointer = *input_pointer;
+		}
+		else
+		{
+			/* character needs to be escaped */
+			*output_pointer++ = '\\';
+			switch (*input_pointer)
+			{
+				case '\\':
+					*output_pointer = '\\';
+					break;
+				case '\"':
+					*output_pointer = '\"';
+					break;
+				case '\b':
+					*output_pointer = 'b';
+					break;
+				case '\f':
+					*output_pointer = 'f';
+					break;
+				case '\n':
+					*output_pointer = 'n';
+					break;
+				case '\r':
+					*output_pointer = 'r';
+					break;
+				case '\t':
+					*output_pointer = 't';
+					break;
+				default:
+					/* escape and print as unicode codepoint */
+					sprintf((char*)output_pointer, "u%04x", *input_pointer);
+					output_pointer += 4;
+					break;
+			}
+		}
+	}
+	output_str[output_len + 1] = '\"';
+	output_str[output_len + 2] = '\0';
+
+	*output = output_str;
+	*output_length = output_len + sizeof(empty);
+	return true;
+}
 
 static void* join_ab_strings_cb(const char *str, void* user_data)
 {
@@ -64,11 +183,14 @@ void list_accounts(AB_ACCOUNT_LIST2* accs) {
 	}
 }
 
-void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pretix_url, const char* pretix_token) {
+void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pretix_event, const char* pretix_url, const char* pretix_token) {
 	if(!a) {
 		fprintf(stderr, "Bank account not found!\n");
 		return;
 	}
+
+	CURL *curl;
+	CURLcode res;
 
 	if(send) {
 		if(!pretix_url) {
@@ -79,6 +201,9 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 			fprintf(stderr, "no token");
 			return;
 		}
+
+		/* In windows, this will init the winsock stuff */
+		curl_global_init(CURL_GLOBAL_ALL);
 	}
 
 	AB_JOB_LIST2 *jl;
@@ -109,7 +234,7 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 
 	ai=AB_ImExporterContext_GetFirstAccountInfo(ctx);
 	while(ai) {
-		unsigned int i = 0;
+		unsigned long i = 0;
 
 		const AB_TRANSACTION *t;
 
@@ -126,7 +251,7 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 				char *trans_purpose = NULL;
 				time_t trans_time = 0;
 				double trans_value = 0.0;
-				char* trans_currency = NULL;
+				const char* trans_currency = NULL;
 
 				const GWEN_STRINGLIST* ab_remote_name = AB_Transaction_GetRemoteName(t);
 				if (ab_remote_name)
@@ -150,36 +275,85 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 				}
 
 				// time to human readable string
-				char buffer[26];
+				char trans_date[20];
 				struct tm* tm_info;
 				tm_info = localtime(&trans_time);
-				strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
+				strftime(trans_date, sizeof(trans_date), "%Y-%m-%d", tm_info);
 
 				trans_value = AB_Value_GetValueAsDouble(v);
 				trans_currency = AB_Value_GetCurrency(v);
-				
+
+				if(!send) 
+				{
 				fprintf(stdout, "transaction %lu - name: (%s) purpose: (%s) date: (%s) value: (%.2f %s)\n",
 						i,
 						trans_remote_name,
 						trans_purpose,
-						buffer,
+						trans_date,
 						trans_value,
 						trans_currency);
+				} else {
+					// obviously this could all be done in a single post request, TODO
+					curl = curl_easy_init();
+					if(curl) {
+						struct curl_slist *headers = NULL;
+
+						char token_str[1024];
+						snprintf(token_str, sizeof(token_str), "Authorization: Token %s", pretix_token);
+
+						char json_str[4096];
+
+						char* json_trans_remote_name = NULL;
+						size_t json_trans_remote_name_size = 0;
+						escape_json(trans_remote_name, &json_trans_remote_name, &json_trans_remote_name_size);
+						
+						char* json_trans_purpose = NULL;
+						size_t json_trans_purpose_size = 0;
+						escape_json(trans_purpose, &json_trans_purpose, &json_trans_purpose_size);
+
+						snprintf(json_str, sizeof(json_str), "{ \"event\": \"%s\", \"transactions\" : [ { \"payer\": %s, \"reference\": %s, \"amount\": \"%.2f\", \"date\": \"%s\" } ] }",
+								pretix_event,
+								json_trans_remote_name,
+								json_trans_purpose,
+								trans_value,
+								trans_date);
+						
+						headers = curl_slist_append(headers, "Content-Type: application/json");
+						headers = curl_slist_append(headers, token_str);
+						headers = curl_slist_append(headers, "charsets: utf-8");
+						curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+						curl_easy_setopt(curl, CURLOPT_URL, pretix_url);
+						curl_easy_setopt(curl, CURLOPT_REFERER, pretix_url);
+						curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_str);
+
+						res = curl_easy_perform(curl);
+						if(res != CURLE_OK)
+							fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+
+						curl_easy_cleanup(curl);
+					}
+
+				}
 			}
 			t=AB_ImExporterAccountInfo_GetNextTransaction(ai);
 		}
 		ai=AB_ImExporterContext_GetNextAccountInfo(ctx);
 	} 
 	AB_Job_free(j);
+
+	if(send) {
+		curl_global_cleanup();
+	}
+
 }
 
 int main(int argc, char **argv) {
 	// help text
-	if(argc>1) {
-		if(strcmp(argv[1], "--help") == 0) {
+	if(argc>0) {
+		if(argc == 1 || strcmp(argv[1], "--help") == 0) {
 			fprintf(stdout, "--list - lists all available accounts\n");
 			fprintf(stdout, "--list_transactions [Account Number (wildcard possible)] - lists transactions from account identified by account number\n");
-			fprintf(stdout, "--send_transactions [Account Number (wildcard possible)] [pretix api url] [pretix api token] - send transactions from account to pretix\n");
+			fprintf(stdout, "--send_transactions [Account Number (wildcard possible)] [pretix event name] [pretix api url] [pretix api token] - send transactions from account to pretix\n");
 			return 0;
 		}
 	}
@@ -210,12 +384,12 @@ int main(int argc, char **argv) {
 		if(strcmp(argv[1], "--list_transactions") == 0) {
 			AB_ACCOUNT* a=AB_Banking_FindAccount(ab,"*","*","*",argv[2],"*");
 			fprintf(stdout, "list of transactions:\n");
-			list_transactions(ab, a, 0, "", "");
+			list_transactions(ab, a, 0, "", "", "");
 		}
 		if(strcmp(argv[1], "--send_transactions") == 0) {
 			AB_ACCOUNT* a=AB_Banking_FindAccount(ab,"*","*","*",argv[2],"*");
 			fprintf(stdout, "list of transactions:\n");
-			list_transactions(ab, a, 1, argv[3], argv[4]);
+			list_transactions(ab, a, 1, argv[3], argv[4], argv[5]);
 		}
 	}
 
