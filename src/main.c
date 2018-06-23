@@ -361,8 +361,9 @@ int main(int argc, char **argv) {
 	// initialize command line GUI
 	GWEN_GUI *gui = GWEN_Gui_CGui_new();
 	GWEN_Gui_SetGui(gui);
+	//GWEN_Gui_SetFlags(gui, GWEN_GUI_FLAGS_NONINTERACTIVE);
 
-	AB_BANKING *ab=AB_Banking_new("pretix", 0, 0);
+	AB_BANKING *ab=AB_Banking_new("pretix", NULL, 0);
 	// potential errorcode
 	int rv=AB_Banking_Init(ab);
 	if (rv) {
