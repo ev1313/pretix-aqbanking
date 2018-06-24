@@ -21,7 +21,7 @@ static bool escape_json(const char* input_str, char** output, size_t* output_len
 		return false;
 	}
 	
-	const char* empty = "\"\"";
+	const char empty[] = "\"\"";
 
 	if(input_str == NULL) {
 		*output = malloc(sizeof(empty));
@@ -329,6 +329,9 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 						res = curl_easy_perform(curl);
 						if(res != CURLE_OK)
 							fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+
+						free(json_trans_remote_name);
+						free(json_trans_purpose);
 
 						curl_easy_cleanup(curl);
 					}
