@@ -354,6 +354,8 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 		ai=AB_ImExporterContext_GetNextAccountInfo(ctx);
 	} 
 	AB_Job_free(j);
+	AB_Job_List2_free(jl);
+	AB_ImExporterContext_free(ctx);
 
 	if(send) {
 		curl_global_cleanup();
@@ -394,17 +396,22 @@ int main(int argc, char **argv) {
 	if(argc>1) {
 		if(strcmp(argv[1], "--list") == 0) {
 			fprintf(stdout, "list of available banking accounts: \n");
-			list_accounts(AB_Banking_GetAccounts(ab));
+			AB_ACCOUNT_LIST2* accs = AB_Banking_GetAccounts(ab);
+			list_accounts(accs);
+			AB_Account_List2_free(accs);
+
 		}
 		if(strcmp(argv[1], "--list_transactions") == 0) {
 			AB_ACCOUNT* a=AB_Banking_FindAccount(ab,"*","*","*",argv[2],"*");
 			fprintf(stdout, "list of transactions:\n");
 			list_transactions(ab, a, 0, "", "", "");
+			AB_Account_free(a);
 		}
 		if(strcmp(argv[1], "--send_transactions") == 0) {
 			AB_ACCOUNT* a=AB_Banking_FindAccount(ab,"*","*","*",argv[2],"*");
 			fprintf(stdout, "list of transactions:\n");
 			list_transactions(ab, a, 1, argv[3], argv[4], argv[5]);
+			AB_Account_free(a);
 		}
 	}
 
@@ -420,7 +427,9 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "ERROR: Error on deinit (%d)\n", rv);
 		return 3;
 	}
+	
 	AB_Banking_free(ab);
+
 	return 0;
 }
 
