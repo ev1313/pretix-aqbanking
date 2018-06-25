@@ -20,7 +20,7 @@ static bool escape_json(const char* input_str, char** output, size_t* output_len
 	{
 		return false;
 	}
-	
+
 	const char empty[] = "\"\"";
 
 	if(input_str == NULL) {
@@ -137,9 +137,13 @@ static void* join_ab_strings_cb(const char *str, void* user_data)
 	//strstrip(tmp);
 	//gnc_utf8_strip_invalid(tmp);
 
-	if (*acc)
+	if(tmp && *acc)
 	{
 		char *join = malloc(strlen(tmp) + strlen(*acc) + 1);
+		if(!join) {
+			free(tmp);
+			return NULL;
+		}
 		strcpy(join, *acc);
 		strcat(join, tmp);
 		free(*acc);
@@ -285,13 +289,13 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 
 				if(!send) 
 				{
-				fprintf(stdout, "transaction %lu - name: (%s) purpose: (%s) date: (%s) value: (%.2f %s)\n",
-						i,
-						trans_remote_name,
-						trans_purpose,
-						trans_date,
-						trans_value,
-						trans_currency);
+					fprintf(stdout, "transaction %lu - name: (%s) purpose: (%s) date: (%s) value: (%.2f %s)\n",
+							i,
+							trans_remote_name,
+							trans_purpose,
+							trans_date,
+							trans_value,
+							trans_currency);
 				} else {
 					// obviously this could all be done in a single post request, TODO
 					curl = curl_easy_init();
@@ -306,7 +310,7 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 						char* json_trans_remote_name = NULL;
 						size_t json_trans_remote_name_size = 0;
 						escape_json(trans_remote_name, &json_trans_remote_name, &json_trans_remote_name_size);
-						
+
 						char* json_trans_purpose = NULL;
 						size_t json_trans_purpose_size = 0;
 						escape_json(trans_purpose, &json_trans_purpose, &json_trans_purpose_size);
@@ -317,7 +321,7 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 								json_trans_purpose,
 								trans_value,
 								trans_date);
-						
+
 						headers = curl_slist_append(headers, "Content-Type: application/json");
 						headers = curl_slist_append(headers, token_str);
 						headers = curl_slist_append(headers, "charsets: utf-8");
@@ -336,6 +340,13 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
 						curl_easy_cleanup(curl);
 					}
 
+				}
+
+				if(trans_remote_name) {
+					free(trans_remote_name); 
+				}
+				if(trans_purpose) {
+					free(trans_purpose);
 				}
 			}
 			t=AB_ImExporterAccountInfo_GetNextTransaction(ai);
