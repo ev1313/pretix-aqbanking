@@ -265,6 +265,7 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
       v=AB_Transaction_GetValue(t);
       if (v) {
         i++;
+
         //purpose=(const char*)AB_Transaction_GetTransactionText(t);
 
         char *trans_remote_name = NULL;
@@ -303,10 +304,12 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
         trans_value = AB_Value_GetValueAsDouble(v);
         trans_currency = AB_Value_GetCurrency(v);
 
+        unsigned long trans_hash = hash(trans_remote_name) + hash(trans_purpose) + hash(trans_date) + hash(trans_currency);
+
         if(!send) 
           {
             fprintf(stdout, "transaction %lu - name: (%s) purpose: (%s) date: (%s) value: (%.2f %s)\n",
-                    hash(trans_remote_name) + hash(trans_purpose) + hash(trans_date) + hash(trans_currency),
+                    trans_hash,
                     trans_remote_name,
                     trans_purpose,
                     trans_date,
@@ -337,6 +340,10 @@ void list_transactions(AB_BANKING* ab, AB_ACCOUNT* a, int send, const char* pret
                      json_trans_purpose,
                      trans_value,
                      trans_date);
+
+	    printf("sending:\n");
+	    printf(json_str);
+	    printf("\n");
 
             headers = curl_slist_append(headers, "Content-Type: application/json");
             headers = curl_slist_append(headers, token_str);
