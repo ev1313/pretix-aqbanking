@@ -8,15 +8,15 @@
 #include <gwenhywfar/gwenhywfar.h>
 
 // djb2
-unsigned long hash(unsigned char *str) {
+unsigned long hash(const char *str) {
   if (!str) {
-    return NULL;
+    return 0;
   }
 
   unsigned long hash = 5381;
   int c;
 
-  while (c = *str++)
+  while ((c = *str++))
     hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
   return hash;
@@ -331,7 +331,7 @@ void list_transactions(AB_BANKING *ab, AB_ACCOUNT *a, int send,
                      trans_value, trans_date);
 
             printf("sending:\n");
-            printf(json_str);
+            printf("%s",json_str);
             printf("\n");
 
             headers =
