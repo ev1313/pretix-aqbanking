@@ -183,7 +183,6 @@ void list_accounts(AB_ACCOUNT_LIST2 *accs) {
       }
       AB_Account_List2Iterator_free(it);
     }
-    AB_Account_List2_free(accs);
   }
 }
 
